@@ -53,9 +53,9 @@ with st.sidebar:
     - `CODIGO_POSTAL` - CP
     - `BEN_COD_SUC` - Código de sucursal
     
-    #### **Campos del Apoderado (opcionales):**
-    - `TIENE_APODERADO` - Debe ser 'S' para usar datos del apoderado
-    - `APO_DNI` - DNI del apoderado (obligatorio si TIENE_APODERADO='S')
+    #### **Campos del Apoderado :**
+    - `IdApoderado` -ID del apoderado 
+    - `APO_DNI` - DNI del apoderado 
     - `APO_SEXO` - Género del apoderado
     - `APO_APELLIDO` - Apellidos del apoderado
     - `APO_NOMBRE` - Nombres del apoderado
@@ -136,28 +136,27 @@ if uploaded_file is not None:
             st.metric("Total de columnas", len(df.columns))
         
         # Validar columnas
-        tiene_columnas_apoderado = all(col in df.columns for col in ['APO_DNI', 'APO_SEXO'])
+        tiene_columnas_apoderado = all(col in df.columns for col in ['IdApoderado', 'APO_SEXO'])
         tiene_columnas_beneficiario = all(col in df.columns for col in ['NUMERO_DOCUMENTO', 'SEXO'])
         
         if not tiene_columnas_apoderado and not tiene_columnas_beneficiario:
             st.error("❌ Error: El archivo debe contener campos de beneficiario o apoderado")
             st.info("💡 **Campos mínimos beneficiario:** SEXO, NUMERO_DOCUMENTO, APELLIDO, NOMBRE, CUIL")
-            st.info("💡 **Campos mínimos apoderado:** APO_SEXO, APO_DNI, APO_APELLIDO, APO_NOMBRE, APO_CUIL")
+            st.info("💡 **Campos mínimos apoderado:** APO_SEXO, IdApoderado, APO_APELLIDO, APO_NOMBRE, APO_CUIL")
         else:
-            # Contar registros con apoderado
+            # Contar registros con apoderado válido
             registros_con_apoderado = 0
-            if 'TIENE_APODERADO' in df.columns and 'APO_DNI' in df.columns:
-                # Verificar que TIENE_APODERADO = 'S' y APO_DNI no esté vacío
-                mask_apoderado = (df['TIENE_APODERADO'].astype(str).str.strip().str.upper() == 'S') & \
-                                 (df['APO_DNI'].notna()) & \
-                                 (df['APO_DNI'].astype(str).str.strip() != '')
+            if 'IdApoderado' in df.columns:
+                # Verificar que IdApoderado no esté vacío
+                mask_apoderado = (df['IdApoderado'].notna()) & \
+                                 (df['IdApoderado'].astype(str).str.strip() != '')
                 registros_con_apoderado = mask_apoderado.sum()
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.info(f"👤 Registros con apoderado: **{registros_con_apoderado}**")
+                    st.info(f"👤 Registros con apoderado válido: **{registros_con_apoderado}**")
                 with col2:
-                    st.info(f"👤 Registros sin apoderado: **{len(df) - registros_con_apoderado}**")
+                    st.info(f"👤 Registros sin apoderado válido: **{len(df) - registros_con_apoderado}**")
             
             # Vista previa de datos
             with st.expander("👁️ Ver vista previa de los datos (primeras 10 filas)"):
@@ -187,8 +186,15 @@ if uploaded_file is not None:
                         # Generar archivo HAB en memoria
                         output = io.StringIO(newline='')
                         lineas_generadas = 0
+                        lineas_saltadas = 0
                         
                         for _, row in df.iterrows():
+                            # Validación: Si IdApoderado está vacío o es null, SALTAR registro
+                            IdApoderado = row.get('IdApoderado', '')
+                            if pd.isna(IdApoderado) or str(IdApoderado).strip() == '':
+                                lineas_saltadas += 1
+                                continue
+                            
                             linea = generar_linea_hab(row)
                             output.write(linea + '\r\n')  # CR-LF (Windows)
                             lineas_generadas += 1
@@ -206,7 +212,13 @@ if uploaded_file is not None:
                         hab_filename = f"{original_name}_{timestamp}.HAB"
                         
                         st.success(f"✅ Archivo .HAB generado exitosamente!")
-                        st.info(f"📊 Total de líneas generadas: **{lineas_generadas}**")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.info(f"📊 Líneas creadas: **{lineas_generadas}**")
+                        with col2:
+                            if lineas_saltadas > 0:
+                                st.warning(f"⚠️  Registros saltados (IdApoderado vacío): **{lineas_saltadas}**")
                         
                         # Botón de descarga
                         st.download_button(
