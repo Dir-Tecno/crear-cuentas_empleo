@@ -54,8 +54,8 @@ with st.sidebar:
     - `BEN_COD_SUC` - Código de sucursal
     
     #### **Campos del Apoderado (opcionales):**
-    - `TIENE_APODERADO` - Indica si tiene apoderado
-    - `APO_DNI` - DNI del apoderado
+    - `TIENE_APODERADO` - Debe ser 'S' para usar datos del apoderado
+    - `APO_DNI` - DNI del apoderado (obligatorio si TIENE_APODERADO='S')
     - `APO_SEXO` - Género del apoderado
     - `APO_APELLIDO` - Apellidos del apoderado
     - `APO_NOMBRE` - Nombres del apoderado
@@ -74,23 +74,36 @@ with st.sidebar:
     
     ### ⚙️ Procesamiento automático
     
-    - **Sanitización:** Elimina acentos y caracteres especiales
-    - **Nombres/Apellidos:** Separa primer y segundo nombre/apellido
-    - **Celulares:** Extrae prefijo y número
-    - **Emails largos:** Usa email genérico si supera 30 caracteres
-    - **Apoderados:** Si hay apoderado válido, usa sus datos en vez del beneficiario
+    - ✅ **Limpieza de columnas:** Elimina espacios en nombres de columnas
+    - ✅ **Sanitización:** Elimina acentos y caracteres especiales
+    - ✅ **Nombres/Apellidos:** Separa primer y segundo nombre/apellido
+    - ✅ **Celulares:** Extrae prefijo (11, 351, 358, 353, etc.) y número
+    - ✅ **Emails largos:** Si supera 30 caracteres → email genérico
+    - ✅ **Barrios vacíos:** Si es NULL → "OTRO"
+    - ✅ **Apoderados:** Si TIENE_APODERADO='S' Y APO_DNI tiene valor → usa datos APO_*
+    - ✅ **Mapeo SEXO:** MUJER/VARON → 2/1 para formato HAB
     
     ---
     
     ### 🎯 Pasos de uso
     
-    1. **Cargar** el archivo Excel con los datos
-    2. **Verificar** la vista previa de los datos
-    3. **Descargar** el archivo .HAB generado
+    1. **Cargar** el archivo Excel (.xlsx)
+    2. **Verificar** la vista previa y columnas detectadas
+    3. **Revisar** registros con/sin apoderado (si aplica)
+    4. **Generar** y **descargar** el archivo .HAB
+    
+    ---
+    
+    ### 📝 Formato del archivo .HAB
+    
+    - **Encoding:** latin-1 (compatibilidad bancaria)
+    - **Saltos de línea:** CR-LF (Windows)
+    - **Campo SEXO:** 1=VARON, 2=MUJER
+    - **Ancho fijo:** Cada campo tiene longitud específica
     """)
     
     st.markdown("---")
-    st.info("💡 **Tip:** El archivo .HAB se genera con encoding latin-1 para compatibilidad bancaria.")
+    st.success("✨ **¡Listo para usar!** La app procesa automáticamente todos los formatos.")
 
 # ==================== CONTENIDO PRINCIPAL ====================
 
@@ -109,6 +122,9 @@ if uploaded_file is not None:
     try:
         # Leer el archivo Excel
         df = pd.read_excel(uploaded_file, dtype=str)
+        
+        # Limpiar nombres de columnas (quitar espacios al inicio/final)
+        df.columns = df.columns.str.strip()
         
         # Mostrar información del archivo
         st.success(f"✅ Archivo cargado exitosamente: **{uploaded_file.name}**")
@@ -131,7 +147,11 @@ if uploaded_file is not None:
             # Contar registros con apoderado
             registros_con_apoderado = 0
             if 'TIENE_APODERADO' in df.columns and 'APO_DNI' in df.columns:
-                registros_con_apoderado = df[df['APO_DNI'].notna()].shape[0]
+                # Verificar que TIENE_APODERADO = 'S' y APO_DNI no esté vacío
+                mask_apoderado = (df['TIENE_APODERADO'].astype(str).str.strip().str.upper() == 'S') & \
+                                 (df['APO_DNI'].notna()) & \
+                                 (df['APO_DNI'].astype(str).str.strip() != '')
+                registros_con_apoderado = mask_apoderado.sum()
                 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -147,6 +167,17 @@ if uploaded_file is not None:
             with st.expander("📋 Ver columnas disponibles"):
                 st.write(list(df.columns))
             
+            # DEBUG: Mostrar primer registro completo
+            with st.expander("🔍 DEBUG - Ver primer registro completo"):
+                if len(df) > 0:
+                    primer_registro = df.iloc[0]
+                    st.markdown("**Todas las columnas y valores del primer registro:**")
+                    for col in df.columns:
+                        valor = primer_registro[col]
+                        st.text(f"{col}: '{valor}'")
+                else:
+                    st.warning("No hay registros en el archivo")
+            
             st.markdown("---")
             
             # Botón para generar archivo HAB
@@ -154,12 +185,12 @@ if uploaded_file is not None:
                 with st.spinner("Procesando archivo..."):
                     try:
                         # Generar archivo HAB en memoria
-                        output = io.StringIO()
+                        output = io.StringIO(newline='')
                         lineas_generadas = 0
                         
                         for _, row in df.iterrows():
                             linea = generar_linea_hab(row)
-                            output.write(linea + '\n')
+                            output.write(linea + '\r\n')  # CR-LF (Windows)
                             lineas_generadas += 1
                         
                         # Obtener contenido del archivo

@@ -79,12 +79,15 @@ Ver el sidebar de la aplicación para la lista completa de campos.
 ## ⚙️ Procesamiento Automático
 
 La aplicación realiza automáticamente:
-- ✅ Sanitización de caracteres especiales y acentos
-- ✅ Separación de primer y segundo nombre/apellido
-- ✅ Extracción de prefijo y número de celular
-- ✅ Reemplazo de emails largos (>30 caracteres)
-- ✅ Validación de datos de apoderado vs beneficiario
-- ✅ Formateo a ancho fijo según especificaciones del banco
+- ✅ **Limpieza de columnas**: Elimina espacios al inicio/final de nombres de columnas
+- ✅ **Sanitización de texto**: Elimina acentos y caracteres especiales
+- ✅ **Separación de nombres**: Divide primer y segundo nombre/apellido
+- ✅ **Procesamiento de celulares**: Extrae prefijo y número según código de área
+- ✅ **Validación de emails**: Reemplaza emails largos (>30 caracteres) con genérico
+- ✅ **Lógica de apoderado**: Si TIENE_APODERADO='S' y APO_DNI tiene valor, usa datos del apoderado
+- ✅ **Mapeo de SEXO**: Convierte 'MUJER'/'VARON' a '2'/'1' para formato HAB
+- ✅ **Formato Windows**: Genera archivo con saltos de línea CR-LF
+- ✅ **Encoding bancario**: Usa latin-1 para compatibilidad
 
 ## 🛠️ Uso del Script Original (CLI)
 
@@ -109,8 +112,20 @@ procesar_archivo_excel('ruta/al/archivo.xlsx')
 - Pandas - Procesamiento de datos
 - OpenPyXL - Lectura de archivos Excel
 
-## 📝 Notas
+## 📝 Notas Importantes
 
-- Los archivos .HAB se generan con encoding **latin-1** para compatibilidad bancaria
-- Si un beneficiario tiene apoderado válido, se usan los datos del apoderado
-- Los emails que superan 30 caracteres se reemplazan automáticamente
+### Formato del archivo HAB:
+- **Encoding**: latin-1 (compatibilidad bancaria)
+- **Saltos de línea**: CR-LF (formato Windows)
+- **Campo SEXO**: '1' = VARON, '2' = MUJER
+
+### Lógica de apoderado:
+- Se requiere `TIENE_APODERADO = 'S'` **Y** que `APO_DNI` tenga valor
+- Cuando hay apoderado válido, se usan **todos** los datos del apoderado (APO_*)
+- Los campos del beneficiario se usan solo cuando NO hay apoderado
+
+### Procesamiento de campos:
+- **Nombres de columnas**: Se limpian espacios automáticamente
+- **Emails largos**: Si supera 30 caracteres → `mailgenerica@bancor.com.ar`
+- **Barrios vacíos**: Si es NULL → 'OTRO'
+- **Acentos**: Se eliminan automáticamente de apellidos y nombres

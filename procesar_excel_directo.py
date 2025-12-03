@@ -96,24 +96,22 @@ def procesar_celular_post(celular_post):
 
 def mapear_sexo(sexo):
     """
-    Mapea el campo SEXO:
-    - 'MUJER' → '2' (para ID_SEXO)
-    - 'VARON' → '1' (para ID_SEXO)
-    - '01' o '1' → 'M' (para archivo HAB)
-    - '02' o '2' → 'F' (para archivo HAB)
+    Convierte el campo SEXO a formato HAB (1 o 2):
+    - 'MUJER' o 'F' o '2' o '02' → '2'
+    - 'VARON' o 'M' o '1' o '01' → '1'
     """
     if pd.isna(sexo):
         return ''
     
     sexo_str = str(sexo).strip().upper()
     
-    # Primero mapear de texto a número
-    if sexo_str == 'MUJER':
+    # Mapear a formato HAB (1 = VARON, 2 = MUJER)
+    if sexo_str in ['MUJER', 'F', '2', '02']:
         return '2'
-    elif sexo_str == 'VARON':
+    elif sexo_str in ['VARON', 'M', '1', '01']:
         return '1'
     else:
-        return sexo_str
+        return ''
 
 
 def mapear_sexo_hab(id_sexo):
@@ -167,23 +165,27 @@ def sanitizar_texto(texto):
 def aplicar_logica_apoderado(row):
     """
     Aplica la lógica de apoderado según las reglas:
-    - Si TIENE_APODERADO existe y APO_DNI no es null, usar campos APO_*
-    - Si no, usar campos normales
+    - Si TIENE_APODERADO = 'S' y APO_DNI no es null/vacío: usar APO_SEXO, APO_DNI, APO_APELLIDO, etc.
+    - Si no: usar SEXO, NUMERO_DOCUMENTO, APELLIDO, etc.
     
     Returns:
-        Dict con los campos mapeados al formato interno del script
+        Dict con los campos procesados (SEXO, NRO_DOCUMENTO, APELLIDO, NOMBRE, etc.)
     """
     datos_procesados = {}
     
     # Verificar si tiene apoderado
     tiene_apoderado = False
-    if 'TIENE_APODERADO' in row.index and not pd.isna(row.get('TIENE_APODERADO', '')):
-        if 'APO_DNI' in row.index and not pd.isna(row.get('APO_DNI', '')):
-            tiene_apoderado = True
+    if 'TIENE_APODERADO' in row.index:
+        tiene_apoderado_valor = str(row.get('TIENE_APODERADO', '')).strip().upper()
+        if tiene_apoderado_valor == 'S':
+            if 'APO_DNI' in row.index:
+                apo_dni = row.get('APO_DNI', '')
+                if not pd.isna(apo_dni) and str(apo_dni).strip() != '':
+                    tiene_apoderado = True
     
     if tiene_apoderado:
         # Usar campos de apoderado
-        datos_procesados['ID_SEXO'] = mapear_sexo(row.get('APO_SEXO', ''))
+        datos_procesados['SEXO'] = row.get('APO_SEXO', '')
         datos_procesados['NRO_DOCUMENTO'] = row.get('APO_DNI', '')
         datos_procesados['APELLIDO'] = sanitizar_texto(row.get('APO_APELLIDO', ''))
         datos_procesados['NOMBRE'] = sanitizar_texto(row.get('APO_NOMBRE', ''))
@@ -199,7 +201,7 @@ def aplicar_logica_apoderado(row):
         datos_procesados['COD_BCO_CBA'] = row.get('APO_COD_SUC', '')
     else:
         # Usar campos normales del beneficiario
-        datos_procesados['ID_SEXO'] = mapear_sexo(row.get('SEXO', ''))
+        datos_procesados['SEXO'] = row.get('SEXO', '')
         datos_procesados['NRO_DOCUMENTO'] = row.get('NUMERO_DOCUMENTO', '')
         datos_procesados['APELLIDO'] = sanitizar_texto(row.get('APELLIDO', ''))
         datos_procesados['NOMBRE'] = sanitizar_texto(row.get('NOMBRE', ''))
@@ -334,10 +336,11 @@ def generar_archivo_hab(df: pd.DataFrame, output_path: str) -> int:
     """
     lineas_generadas = 0
     
-    with open(output_path, 'w', encoding='latin-1') as f:
+    # newline='' para controlar manualmente los saltos de línea (CR-LF para Windows)
+    with open(output_path, 'w', encoding='latin-1', newline='') as f:
         for _, row in df.iterrows():
             linea = generar_linea_hab(row)
-            f.write(linea + '\n')
+            f.write(linea + '\r\n')  # CR-LF (Windows)
             lineas_generadas += 1
     
     return lineas_generadas
@@ -353,6 +356,10 @@ def procesar_archivo_excel(excel_path):
     try:
         # Leer archivo Excel
         df = pd.read_excel(excel_path, dtype=str)
+        
+        # Limpiar nombres de columnas (quitar espacios al inicio/final)
+        df.columns = df.columns.str.strip()
+        
         print(f"   ✅ Archivo cargado con {len(df)} filas y {len(df.columns)} columnas.")
         print(f"   📋 Columnas disponibles: {list(df.columns)}")
         
@@ -371,7 +378,11 @@ def procesar_archivo_excel(excel_path):
         # Contar registros con apoderado
         registros_con_apoderado = 0
         if 'TIENE_APODERADO' in df.columns and 'APO_DNI' in df.columns:
-            registros_con_apoderado = df[df['APO_DNI'].notna()].shape[0]
+            # Verificar que TIENE_APODERADO = 'S' y APO_DNI no esté vacío
+            mask_apoderado = (df['TIENE_APODERADO'].astype(str).str.strip().str.upper() == 'S') & \
+                             (df['APO_DNI'].notna()) & \
+                             (df['APO_DNI'].astype(str).str.strip() != '')
+            registros_con_apoderado = mask_apoderado.sum()
             print(f"   📊 Registros con apoderado: {registros_con_apoderado}")
             print(f"   📊 Registros sin apoderado: {len(df) - registros_con_apoderado}")
         
