@@ -165,7 +165,7 @@ def sanitizar_texto(texto):
 def aplicar_logica_apoderado(row):
     """
     Aplica la lógica de apoderado según las reglas:
-    - Si IdApoderado no es null/vacío: usar campos del apoderado
+    - Si ID_APODERADO no es null/vacío: usar campos del apoderado
     - Si no: usar SEXO, NUMERO_DOCUMENTO, APELLIDO, etc.
     
     Returns:
@@ -173,11 +173,11 @@ def aplicar_logica_apoderado(row):
     """
     datos_procesados = {}
     
-    # Verificar si tiene apoderado: validar que IdApoderado no sea null/vacío
+    # Verificar si tiene apoderado: validar que ID_APODERADO no sea null/vacío
     tiene_apoderado = False
-    if 'IdApoderado' in row.index:
-        IdApoderado = row.get('IdApoderado', '')
-        if not pd.isna(IdApoderado) and str(IdApoderado).strip() != '':
+    if 'ID_APODERADO' in row.index:
+        ID_APODERADO = row.get('ID_APODERADO', '')
+        if not pd.isna(ID_APODERADO) and str(ID_APODERADO).strip() != '':
             tiene_apoderado = True
     
     if tiene_apoderado:
@@ -320,15 +320,14 @@ def generar_linea_hab(row):
     return linea
 
 
-def generar_archivo_hab(df: pd.DataFrame, output_path: str) -> tuple:
+def generar_archivo_hab(df: pd.DataFrame, output_path: str, solo_con_apoderado: bool = True) -> tuple:
     """
     Genera un archivo .HAB a partir de un DataFrame.
-    
-    Validación: Solo genera línea HAB si IdApoderado NO es null/vacío.
     
     Args:
         df: DataFrame con los datos procesados
         output_path: Ruta donde guardar el archivo .HAB
+        solo_con_apoderado: Si True, solo genera líneas para registros con ID_APODERADO válido
     
     Returns:
         Tupla (lineas_generadas, lineas_saltadas) - número de líneas generadas y saltadas
@@ -339,11 +338,12 @@ def generar_archivo_hab(df: pd.DataFrame, output_path: str) -> tuple:
     # newline='' para controlar manualmente los saltos de línea (CR-LF para Windows)
     with open(output_path, 'w', encoding='latin-1', newline='') as f:
         for _, row in df.iterrows():
-            # Validación: Si IdApoderado está vacío o es null, SALTAR registro
-            IdApoderado = row.get('IdApoderado', '')
-            if pd.isna(IdApoderado) or str(IdApoderado).strip() == '':
-                lineas_saltadas += 1
-                continue
+            # Validación condicional
+            if solo_con_apoderado:
+                ID_APODERADO = row.get('ID_APODERADO', '')
+                if pd.isna(ID_APODERADO) or str(ID_APODERADO).strip() == '':
+                    lineas_saltadas += 1
+                    continue
             
             linea = generar_linea_hab(row)
             f.write(linea + '\r\n')  # CR-LF (Windows)
@@ -372,23 +372,23 @@ def procesar_archivo_excel(excel_path):
         # Validar columnas mínimas requeridas
         # Si tiene apoderado, verificar campos de apoderado
         # Si no, verificar campos de beneficiario
-        tiene_columnas_apoderado = all(col in df.columns for col in ['IdApoderado', 'APO_SEXO'])
+        tiene_columnas_apoderado = all(col in df.columns for col in ['ID_APODERADO', 'APO_SEXO'])
         tiene_columnas_beneficiario = all(col in df.columns for col in ['NUMERO_DOCUMENTO', 'SEXO'])
         
         if not tiene_columnas_apoderado and not tiene_columnas_beneficiario:
             print(f"   ❌ Error: El archivo debe contener campos de beneficiario o apoderado")
             print(f"   💡 Campos mínimos beneficiario: SEXO, NUMERO_DOCUMENTO, APELLIDO, NOMBRE, CUIL")
-            print(f"   💡 Campos mínimos apoderado: APO_SEXO, IdApoderado, APO_APELLIDO, APO_NOMBRE, APO_CUIL")
+            print(f"   💡 Campos mínimos apoderado: APO_SEXO, ID_APODERADO, APO_APELLIDO, APO_NOMBRE, APO_CUIL")
             return
         
-        # Contar registros con apoderado válido (IdApoderado no vacío)
+        # Contar registros con apoderado válido (ID_APODERADO no vacío)
         registros_con_apoderado = 0
-        if 'IdApoderado' in df.columns:
-            # Verificar que IdApoderado no esté vacío
-            mask_apoderado = (df['IdApoderado'].notna()) & \
-                             (df['IdApoderado'].astype(str).str.strip() != '')
+        if 'ID_APODERADO' in df.columns:
+            # Verificar que ID_APODERADO no esté vacío
+            mask_apoderado = (df['ID_APODERADO'].notna()) & \
+                             (df['ID_APODERADO'].astype(str).str.strip() != '')
             registros_con_apoderado = mask_apoderado.sum()
-            print(f"   📊 Registros con apoderado válido (IdApoderado): {registros_con_apoderado}")
+            print(f"   📊 Registros con apoderado válido (ID_APODERADO): {registros_con_apoderado}")
             print(f"   📊 Registros sin apoderado válido: {len(df) - registros_con_apoderado}")
         
         # Generar archivo .HAB
@@ -402,7 +402,7 @@ def procesar_archivo_excel(excel_path):
         print(f"   ✅ Archivo .HAB generado: {hab_path}")
         print(f"   📊 Total de líneas creadas en archivo .HAB: {lineas_hab}")
         if lineas_saltadas > 0:
-            print(f"   ⚠️  Registros saltados (IdApoderado vacío): {lineas_saltadas}")
+            print(f"   ⚠️  Registros saltados (ID_APODERADO vacío): {lineas_saltadas}")
         
         # Guardar también Excel procesado con los datos normalizados
         excel_output_filename = f"procesado_{os.path.splitext(filename)[0]}_{timestamp}.xlsx"
