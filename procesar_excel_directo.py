@@ -96,20 +96,19 @@ def procesar_celular_post(celular_post):
 
 def mapear_sexo(sexo):
     """
-    Convierte el campo SEXO a formato HAB (1 o 2):
-    - 'MUJER' o 'F' o '2' o '02' → '2'
-    - 'VARON' o 'M' o '1' o '01' → '1'
+    Convierte el campo SEXO a formato HAB (M o F):
+    - 'MUJER', 'F', '2' o '02' → 'F'
+    - 'VARON', 'M', '1' o '01' → 'M'
     """
     if pd.isna(sexo):
         return ''
     
     sexo_str = str(sexo).strip().upper()
     
-    # Mapear a formato HAB (1 = VARON, 2 = MUJER)
-    if sexo_str in ['MUJER', 'F', '2', '02']:
-        return '2'
-    elif sexo_str in ['VARON', 'M', '1', '01']:
-        return '1'
+    if sexo_str in ['MUJER', '2', '02']:
+        return 'F'
+    elif sexo_str in ['VARON', '1', '01']:
+        return 'M'
     else:
         return ''
 

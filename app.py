@@ -38,7 +38,7 @@ with st.sidebar:
     ### 📊 Formato del Excel esperado
     
     #### **Campos del Beneficiario (obligatorios si no hay apoderado):**
-    - `SEXO` - Género (MUJER/VARON)
+    - `SEXO` - Género (VARON/MUJER)
     - `NUMERO_DOCUMENTO` - DNI
     - `APELLIDO` - Apellidos completos
     - `NOMBRE` - Nombres completos
